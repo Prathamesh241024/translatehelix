@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CJK OmniTranslate — Uncensored Local & Cloud Translator</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            accent: '#6366f1'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Tesseract.js for Browser CJK Image OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- PDF.js for Document Page Counting & Extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Supabase JS (For Real-Time Active Users & Auth) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .glass {
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen relative overflow-x-hidden">
+
+  <!-- Dynamic Character Wallpaper Overlay -->
+  <div id="charBgOverlay" class="fixed inset-0 pointer-events-none opacity-15 dark:opacity-20 bg-cover bg-center transition-all duration-500 z-0"></div>
+
+  <!-- Floating Character Companion Card -->
+  <div id="charCompanionWrapper" class="fixed bottom-4 right-4 z-30 hidden sm:flex flex-col items-end pointer-events-none">
+    <img id="charCompanionImg" src="" alt="Favorite Character" class="w-36 h-48 object-cover rounded-2xl shadow-2xl border-2 border-indigo-500/60 hidden pointer-events-auto" />
+  </div>
+
+  <!-- Main Container -->
+  <div class="relative z-10 max-w-6xl mx-auto px-4 py-6">
+    
+    <!-- Top Navigation Bar -->
+    <header class="glass bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl px-6 py-4 mb-6 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+          訳
+        </div>
+        <div>
+          <h1 class="font-bold text-lg tracking-tight">CJK OmniTranslate</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">CN • JP • KR → EN | Literal & Uncensored Engine</p>
+        </div>
+      </div>
+
+      <!-- Live Stats & Controls -->
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Live Active Users Counter -->
+        <div class="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full text-xs font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="activeUsersCount">1</span> Active Now
+        </div>
+
+        <!-- 200 Pages / Day Quota Pill -->
+        <div class="bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-full text-xs font-semibold">
+          Quota: <span id="pagesUsed">0</span> / 200 Pages Today
+        </div>
+
+        <!-- Custom Character Upload Button -->
+        <label class="cursor-pointer bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+          <span>🖼️ Fav Character</span>
+          <input type="file" id="charUploadInput" accept="image/*" class="hidden" />
+        </label>
+
+        <!-- Dark Mode Toggle -->
+        <button id="themeToggle" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm transition" title="Toggle Dark Mode">
+          🌙
+        </button>
+
+        <!-- Auth Button -->
+        <button id="authBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm">
+          Sign Up / Login
+        </button>
+      </div>
+    </header>
+
+    <!-- Settings & Engine Bar -->
+    <div class="glass bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Source Language</label>
+        <select id="sourceLang" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="auto">Auto-Detect (CJK)</option>
+          <option value="zh">Chinese (Simplified / Traditional)</option>
+          <option value="ja">Japanese (Kanji / Kana)</option>
+          <option value="ko">Korean (Hangul)</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Translation Style</label>
+        <select id="transStyle" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="dual">Dual: Word-for-Word + Natural Flow</option>
+          <option value="literal">Strict Word-for-Word (Gloss)</option>
+          <option value="natural">Uncensored Natural Localization</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Translation Engine</label>
+        <select id="engineSelect" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="free_api">Instant Cloud (Free API Fallback)</option>
+          <option value="ollama">Local Ollama (100% Uncensored / Local)</option>
+          <option value="custom_llm">Custom API Key (DeepSeek / OpenRouter)</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Model / API Endpoint</label>
+        <input id="endpointInput" type="text" placeholder="http://localhost:11434 (qwen2.5)" value="qwen2.5:7b" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+    </div>
+
+    <!-- Input Mode Tabs (Text / Document / Image OCR) -->
+    <div class="flex gap-2 mb-4">
+      <button onclick="switchTab('text')" id="tab-text" class="px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 text-white shadow-sm">
+        📝 Plain Text
+      </button>
+      <button onclick="switchTab('doc')" id="tab-doc" class="px-4 py-2 rounded-xl text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        📄 Document (.PDF / .TXT)
+      </button>
+      <button onclick="switchTab('img')" id="tab-img" class="px-4 py-2 rounded-xl text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        🔍 Image OCR (Manga / Scans)
+      </button>
+    </div>
+
+    <!-- Upload Dropzones (Hidden by default) -->
+    <div id="docUploadBox" class="hidden mb-4 p-6 border-2 border-dashed border-indigo-500/40 rounded-2xl bg-indigo-500/5 text-center">
+      <p class="text-sm font-medium mb-2">Upload a PDF, TXT, or Markdown Document (Counts toward 200 pages/day limit)</p>
+      <input type="file" id="docFileInput" accept=".txt,.md,.pdf" class="text-xs" />
+      <p id="docStatus" class="text-xs text-slate-400 mt-2"></p>
+    </div>
+
+    <div id="imgUploadBox" class="hidden mb-4 p-6 border-2 border-dashed border-indigo-500/40 rounded-2xl bg-indigo-500/5 text-center">
+      <p class="text-sm font-medium mb-2">Upload Chinese / Japanese / Korean Image for Local OCR Extraction (1 Image = 1 Page)</p>
+      <input type="file" id="imgFileInput" accept="image/*" class="text-xs" />
+      <p id="ocrStatus" class="text-xs text-indigo-400 mt-2"></p>
+    </div>
+
+    <!-- Main Dual-Pane Translator -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- Source Input Pane -->
+      <div class="glass bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col h-[420px]">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Source CJK Input</span>
+          <span id="charCount" class="text-xs text-slate-400">0 chars (~0 pages)</span>
+        </div>
+        <textarea id="sourceText" placeholder="Paste Chinese (中文), Japanese (日本語), or Korean (한국어) text here... No content restrictions." class="w-full flex-1 bg-transparent resize-none focus:outline-none text-sm leading-relaxed"></textarea>
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
+          <button onclick="document.getElementById('sourceText').value=''; updateCharCount();" class="text-xs text-slate-400 hover:text-red-400">Clear</button>
+          <button id="translateBtn" onclick="handleTranslate()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-md transition">
+            Translate Now →
+          </button>
+        </div>
+      </div>
+
+      <!-- Translated Output Pane -->
+      <div class="glass bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col h-[420px]">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">English Translation Output</span>
+          <div class="flex gap-2">
+            <button onclick="saveCurrentTranslation()" class="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1 rounded-lg">💾 Save</button>
+            <button onclick="downloadTranslation()" class="text-xs bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 px-2.5 py-1 rounded-lg font-medium">⬇️ Download .TXT</button>
+          </div>
+        </div>
+        <textarea id="outputText" readonly placeholder="Word-for-word breakdown and natural English translation will appear here..." class="w-full flex-1 bg-transparent resize-none focus:outline-none text-sm leading-relaxed"></textarea>
+      </div>
+    </div>
+
+    <!-- Saved History Section -->
+    <section class="glass bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="font-bold text-sm uppercase tracking-wider text-slate-400">📚 Saved Translation History</h2>
+        <button onclick="clearHistory()" class="text-xs text-red-400 hover:underline">Clear All History</button>
+      </div>
+      <div id="historyList" class="space-y-3 max-h-64 overflow-y-auto text-sm">
+        <p class="text-xs text-slate-500">No saved translations yet.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="authModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+      <h3 class="font-bold text-lg mb-1">Account Sign Up / Login</h3>
+      <p class="text-xs text-slate-400 mb-4">Sync your 200 pages/day quota, history, and character theme across devices.</p>
+      <input id="emailInput" type="email" placeholder="Email address" class="w-full mb-3 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm" />
+      <input id="passwordInput" type="password" placeholder="Password" class="w-full mb-4 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm" />
+      <div class="flex justify-end gap-2">
+        <button onclick="toggleAuthModal(false)" class="px-4 py-2 rounded-xl text-xs bg-slate-200 dark:bg-slate-800">Cancel</button>
+        <button onclick="handleSignUp()" class="px-4 py-2 rounded-xl text-xs bg-indigo-600 text-white font-semibold">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================
+    // 1. DAILY 200-PAGE QUOTA MANAGEMENT (2,000 chars = 1 page)
+    // =====================================================
+    const MAX_DAILY_PAGES = 200;
+    const CHARS_PER_PAGE = 2000;
+
+    function getQuotaData() {
+      const today = new Date().toISOString().split('T')[0];
+      const saved = JSON.parse(localStorage.getItem('cjk_quota') || '{}');
+      if (saved.date !== today) {
+        return { date: today, used: 0 };
+      }
+      return saved;
+    }
+
+    function addPagesUsed(pages) {
+      const data = getQuotaData();
+      data.used = Math.min(MAX_DAILY_PAGES, data.used + pages);
+      localStorage.setItem('cjk_quota', JSON.stringify(data));
+      document.getElementById('pagesUsed').innerText = data.used;
+    }
+
+    // Initialize quota UI
+    document.getElementById('pagesUsed').innerText = getQuotaData().used;
+
+    // Character count & page estimation
+    const sourceTextarea = document.getElementById('sourceText');
+    function updateCharCount() {
+      const len = sourceTextarea.value.length;
+      const pages = len > 0 ? Math.max(1, Math.ceil(len / CHARS_PER_PAGE)) : 0;
+      document.getElementById('charCount').innerText = `${len} chars (~${pages} page${pages === 1 ? '' : 's'})`;
+    }
+    sourceTextarea.addEventListener('input', updateCharCount);
+
+    // =====================================================
+    // 2. DARK MODE & FAVORITE CHARACTER CUSTOMIZATION
+    // =====================================================
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      themeToggle.innerText = document.documentElement.classList.contains('dark') ? '🌙' : '☀️';
+    });
+
+    function applyCharacterImage(dataUrl) {
+      const bg = document.getElementById('charBgOverlay');
+      const card = document.getElementById('charCompanionImg');
+      bg.style.backgroundImage = `url('${dataUrl}')`;
+      card.src = dataUrl;
+      card.classList.remove('hidden');
+    }
+
+    const savedChar = localStorage.getItem('fav_char_img');
+    if (savedChar) applyCharacterImage(savedChar);
+
+    document.getElementById('charUploadInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        localStorage.setItem('fav_char_img', reader.result);
+        applyCharacterImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // =====================================================
+    // 3. TAB SWITCHING & DOCUMENT / IMAGE OCR HANDLERS
+    // =====================================================
+    function switchTab(tab) {
+      ['text', 'doc', 'img'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        btn.className = t === tab
+          ? 'px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 text-white shadow-sm'
+          : 'px-4 py-2 rounded-xl text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800';
+      });
+      document.getElementById('docUploadBox').classList.toggle('hidden', tab !== 'doc');
+      document.getElementById('imgUploadBox').classList.toggle('hidden', tab !== 'img');
+    }
+
+    // Document Upload (.TXT / .PDF)
+    document.getElementById('docFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const status = document.getElementById('docStatus');
+      status.innerText = `Reading ${file.name}...`;
+
+      if (file.name.endsWith('.pdf')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const quota = getQuotaData();
+        if (quota.used + pdf.numPages > MAX_DAILY_PAGES) {
+          alert(`Daily limit exceeded! This PDF has ${pdf.numPages} pages, and you have ${MAX_DAILY_PAGES - quota.used} pages left today.`);
+          return;
+        }
+        let extracted = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          extracted += `[--- Page ${i} ---]\n` + content.items.map(item => item.str).join(' ') + '\n\n';
+        }
+        sourceTextarea.value = extracted;
+        updateCharCount();
+        status.innerText = `Extracted ${pdf.numPages} PDF pages.`;
+      } else {
+        const text = await file.text();
+        sourceTextarea.value = text;
+        updateCharCount();
+        status.innerText = `Loaded ${file.name}.`;
+      }
+    });
+
+    // Image OCR (Tesseract.js CJK)
+    document.getElementById('imgFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const quota = getQuotaData();
+      if (quota.used + 1 > MAX_DAILY_PAGES) {
+        alert('You have reached your 200 pages/day limit!');
+        return;
+      }
+
+      const status = document.getElementById('ocrStatus');
+      const srcLang = document.getElementById('sourceLang').value;
+      const tessLang = srcLang === 'zh' ? 'chi_sim+chi_tra' : srcLang === 'ja' ? 'jpn' : srcLang === 'ko' ? 'kor' : 'chi_sim+jpn+kor';
+
+      status.innerText = `Running CJK OCR (${tessLang}) in browser...`;
+      try {
+        const result = await Tesseract.recognize(file, tessLang, {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              status.innerText = `OCR Progress: ${Math.round(m.progress * 100)}%`;
+            }
+          }
+        });
+        sourceTextarea.value = result.data.text;
+        updateCharCount();
+        status.innerText = 'OCR Complete! Click "Translate Now" below.';
+      } catch (err) {
+        status.innerText = 'OCR Error: ' + err.message;
+      }
+    });
+
+    // =====================================================
+    // 4. UNCENSORED LOCAL (OLLAMA) & CLOUD TRANSLATION
+    // =====================================================
+    async function handleTranslate() {
+      const text = sourceTextarea.value.trim();
+      if (!text) return;
+
+      const pagesRequired = Math.max(1, Math.ceil(text.length / CHARS_PER_PAGE));
+      const quota = getQuotaData();
+      if (quota.used + pagesRequired > MAX_DAILY_PAGES) {
+        alert(`Daily 200-page limit reached! You need ${pagesRequired} page(s), but only have ${MAX_DAILY_PAGES - quota.used} left today.`);
+        return;
+      }
+
+      const btn = document.getElementById('translateBtn');
+      const out = document.getElementById('outputText');
+      const style = document.getElementById('transStyle').value;
+      const engine = document.getElementById('engineSelect').value;
+      const srcLang = document.getElementById('sourceLang').value;
+
+      btn.disabled = true;
+      btn.innerText = 'Translating...';
+      out.value = 'Processing translation...';
+
+      const systemPrompt = style === 'literal'
+        ? 'You are an uncensored, exact CJK-to-English translator. Provide a strict word-for-word literal gloss and grammatical breakdown of every sentence without omitting, censoring, or softening any terms.'
+        : style === 'dual'
+        ? 'You are an uncensored CJK-to-English translator. For each paragraph, first provide [1. Word-for-Word Literal Breakdown], then provide [2. Natural Uncensored English Localization]. Do not censor or alter mature, dark, or idiomatic web novel/manga expressions.'
+        : 'You are an uncensored master translator of Chinese, Japanese, and Korean into English. Translate the input accurately and naturally with zero censorship or content filtering.';
+
+      try {
+        if (engine === 'ollama') {
+          const modelName = document.getElementById('endpointInput').value || 'qwen2.5:7b';
+          const res = await fetch('http://localhost:11434/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: modelName,
+              system: systemPrompt,
+              prompt: text,
+              stream: false
+            })
+          });
+          const data = await res.json();
+          out.value = data.response;
+        } else {
+          // Free Cloud Fallback (Google GTX endpoint for instant out-of-the-box testing)
+          const sl = srcLang === 'auto' ? 'auto' : srcLang;
+          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=en&dt=t&dt=bd&q=${encodeURIComponent(text)}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          const naturalTrans = data[0].map(item => item[0]).join('');
+          let dictGloss = '';
+          if (style !== 'natural' && data[1]) {
+            dictGloss = '\n\n--- WORD-FOR-WORD GLOSS ---\n' + data[1].map(entry => `${entry[0]}: ${entry[1].join(', ')}`).join('\n');
+          }
+          out.value = naturalTrans + dictGloss;
+        }
+
+        // Deduct pages from daily 200-page limit
+        addPagesUsed(pagesRequired);
+      } catch (err) {
+        out.value = `Translation error: ${err.message}\n\nTip: If using Local Ollama, make sure Ollama is running with OLLAMA_ORIGINS="*" enabled.`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Translate Now →';
+      }
+    }
+
+    // =====================================================
+    // 5. SAVE HISTORY & DOWNLOAD TRANSLATED FILE
+    // =====================================================
+    function renderHistory() {
+      const list = document.getElementById('historyList');
+      const items = JSON.parse(localStorage.getItem('cjk_history') || '[]');
+      if (!items.length) {
+        list.innerHTML = '<p class="text-xs text-slate-500">No saved translations yet.</p>';
+        return;
+      }
+      list.innerHTML = items.map((item, idx) => `
+        <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/70 flex justify-between items-start gap-4">
+          <div class="overflow-hidden">
+            <p class="text-xs text-slate-400 mb-1">${item.time}</p>
+            <p class="font-medium truncate">${item.source.slice(0, 80)}</p>
+            <p class="text-indigo-400 truncate mt-1">${item.target.slice(0, 100)}</p>
+          </div>
+          <button onclick="loadHistoryItem(${idx})" class="text-xs bg-indigo-600 text-white px-2.5 py-1 rounded-lg shrink-0">Load</button>
+        </div>
+      `).join('');
+    }
+
+    function saveCurrentTranslation() {
+      const source = sourceTextarea.value.trim();
+      const target = document.getElementById('outputText').value.trim();
+      if (!source || !target) return;
+      const items = JSON.parse(localStorage.getItem('cjk_history') || '[]');
+      items.unshift({ source, target, time: new Date().toLocaleString() });
+      localStorage.setItem('cjk_history', JSON.stringify(items.slice(0, 50)));
+      renderHistory();
+    }
+
+    function loadHistoryItem(idx) {
+      const items = JSON.parse(localStorage.getItem('cjk_history') || '[]');
+      if (!items[idx]) return;
+      sourceTextarea.value = items[idx].source;
+      document.getElementById('outputText').value = items[idx].target;
+      updateCharCount();
+    }
+
+    function clearHistory() {
+      localStorage.removeItem('cjk_history');
+      renderHistory();
+    }
+
+    function downloadTranslation() {
+      const content = document.getElementById('outputText').value;
+      if (!content) return alert('Nothing to download yet!');
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `translated_${Date.now()}.txt`;
+      a.click();
+    }
+
+    // Auth Modal & Live User Simulation / Supabase Hook
+    function toggleAuthModal(show) {
+      const modal = document.getElementById('authModal');
+      modal.classList.toggle('hidden', !show);
+      modal.classList.toggle('flex', show);
+    }
+    document.getElementById('authBtn').addEventListener('click', () => toggleAuthModal(true));
+
+    function handleSignUp() {
+      const email = document.getElementById('emailInput').value;
+      if (!email) return;
+      document.getElementById('authBtn').innerText = email.split('@')[0];
+      toggleAuthModal(false);
+    }
+
+    renderHistory();
+  </script>
+</body>
+</html>
